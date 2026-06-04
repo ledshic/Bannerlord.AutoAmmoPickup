@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Module>
+  <Id value="AutoAmmoPickup" />
+  <Name value="Auto Ammo Pickup" />
+  <Version value="__VERSION__" />
+  <DefaultModule value="false" />
+  <ModuleCategory value="Singleplayer" />
+  <ModuleType value="Community" />
+  <SubModules>
+    <SubModule>
+      <Name value="Bannerlord.AutoAmmoPickup" />
+      <DLLName value="Bannerlord.AutoAmmoPickup.dll" />
+      <SubModuleClassType value="AutoAmmoPickup.AutoAmmoPickupSubModule" />
+      <Tags />
+    </SubModule>
+  </SubModules>
+</Module>
