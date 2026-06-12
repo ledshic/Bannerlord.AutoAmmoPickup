@@ -1,0 +1,76 @@
+name: Build
+
+# Dispatchable workflow for this Bannerlord module.
+# Run from the GitHub repo's Actions tab → "Build" → "Run workflow".
+# Provide the version that will be used in SubModule.xml and the output zip filename.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version string for the build (e.g. v1.0.0, v2.1.3-beta)'
+        required: true
+        default: 'v1.0.0'
+        type: string
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.event.inputs.version }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            8.0.x
+            6.0.x
+
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Run module build script
+        shell: pwsh
+        run: |
+          $ver = "${{ github.event.inputs.version }}"
+          Write-Host "========================================"
+          Write-Host "Building module @ version $ver"
+          Write-Host "========================================"
+          & pwsh -File ./dev/build.ps1 -Version $ver
+
+      - name: Locate produced zip
+        id: zip
+        shell: pwsh
+        run: |
+          $zipFile = Get-ChildItem -Path ./out -Filter "*.zip" | Select-Object -First 1
+          if (-not $zipFile) {
+            Write-Error "No zip was produced by dev/build.ps1 in the out/ folder"
+            exit 1
+          }
+          $artifactName = $zipFile.BaseName
+          Write-Host "Found zip: $($zipFile.FullName) -> artifact name: $artifactName"
+          echo "name=$artifactName" >> $env:GITHUB_OUTPUT
+          echo "path=$($zipFile.FullName)" >> $env:GITHUB_OUTPUT
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.zip.outputs.name }}
+          path: ${{ steps.zip.outputs.path }}
+          retention-days: 30
+
+# Notes:
+# - This workflow lives inside the individual module git repository.
+# - It calls the existing dev/build.ps1 (the single source of truth for packaging).
+# - The module name is taken from whatever the build script produces (zip name).
+# - Uses Bannerlord.ReferenceAssemblies fallback so it builds on GitHub-hosted runners
+#   without needing a local copy of Mount & Blade II: Bannerlord.
+# - Download the zip from the "Artifacts" section after the run.
+# - You can trigger this via GitHub UI, the REST API, or GitHub CLI (`gh workflow run`).

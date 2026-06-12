@@ -36,16 +36,28 @@ jobs:
           $version = "${{ github.event.inputs.version }}"
           ./dev/build.ps1 -Version $version
 
+      - name: Locate produced zip
+        id: zip
+        shell: pwsh
+        run: |
+          $zipFile = Get-ChildItem -Path ./out -Filter "*.zip" | Select-Object -First 1
+          if (-not $zipFile) {
+            Write-Error "No zip was produced by dev/build.ps1"
+            exit 1
+          }
+          Write-Host "Using zip: $($zipFile.FullName)"
+          echo "path=$($zipFile.FullName)" >> $env:GITHUB_OUTPUT
+
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: bannerlord-auto-ammo-pickup-${{ github.event.inputs.version }}
-          path: out/Bannerlord.AutoAmmoPickup-${{ github.event.inputs.version }}.zip
+          name: ${{ github.event.repository.name }}-${{ github.event.inputs.version }}
+          path: ${{ steps.zip.outputs.path }}
 
       - name: Create release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.event.inputs.version }}
-          name: Bannerlord Auto Ammo Pickup ${{ github.event.inputs.version }}
+          name: ${{ github.event.repository.name }} ${{ github.event.inputs.version }}
           prerelease: ${{ github.event.inputs.prerelease }}
-          files: out/Bannerlord.AutoAmmoPickup-${{ github.event.inputs.version }}.zip
+          files: ${{ steps.zip.outputs.path }}
