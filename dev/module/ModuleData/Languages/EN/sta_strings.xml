@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<base xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:noNamespaceSchemaLocation="https://raw.githubusercontent.com/BUTR/Bannerlord.XmlSchemas/master/ModuleLanguage.xsd">
+  <tags>
+    <tag language="English" />
+  </tags>
+  <strings>
+    <!-- Bannerlord.AutoAmmoPickup - English Localization -->
+    <!-- MCM UI strings + runtime messages -->
+
+    <!-- Settings -->
+    <string id="AAM_SettingsTitle" text="Auto Ammo Pickup {VERSION}" />
+    <string id="AAM_General" text="General" />
+    <string id="AAM_Tuning" text="Tuning" />
+
+    <string id="AAM_Enabled" text="Enable Mod" />
+    <string id="AAM_EnabledHint" text="Master toggle. When off, no automatic ammo pickup will occur." />
+
+    <string id="AAM_PickupMode" text="Pickup Mode" />
+    <string id="AAM_PickupModeHint" text="Controls what kind of ammo the mod will automatically pick up." />
+
+    <string id="AAM_ModeDefault" text="Default - Any usable ammo based on your equipped weapons" />
+    <string id="AAM_ModeEquipped" text="Only ammo for the currently equipped ranged weapon (in-hand)" />
+    <string id="AAM_ModeDisabled" text="Disabled" />
+
+    <string id="AAM_DisableCrouch" text="Disable while crouching" />
+    <string id="AAM_DisableCrouchHint" text="When checked (default), automatic pickup is suspended while your character is in the crouched stance (default toggle key: Z). Useful to avoid picking up ammo while trying to stay hidden or aim carefully." />
+
+    <string id="AAM_ShowMessages" text="Show Pickup Messages" />
+    <string id="AAM_ShowMessagesHint" text="Display a small yellow message when ammo is automatically picked up." />
+
+    <string id="AAM_Distance" text="Auto Pickup Distance (meters)" />
+    <string id="AAM_DistanceHint" text="How close (horizontal) the player must be to auto-pick up ammo. Lower values feel more realistic." />
+
+    <!-- Runtime messages -->
+    <string id="AAM_LOADED" text="Auto Ammo Pickup loaded. Ammo will be automatically collected in battles when in range." />
+    <string id="AAM_PICKUP" text="Picking up {AMOUNT} {ITEM}" />
+
+  </strings>
+</base>

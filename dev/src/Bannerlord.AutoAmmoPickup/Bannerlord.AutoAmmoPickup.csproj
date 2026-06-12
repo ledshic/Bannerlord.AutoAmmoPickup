@@ -4,7 +4,7 @@
     <LangVersion>latest</LangVersion>
     <Nullable>disable</Nullable>
     <AssemblyName>Bannerlord.AutoAmmoPickup</AssemblyName>
-    <RootNamespace>AutoAmmoPickup</RootNamespace>
+    <RootNamespace>Bannerlord.AutoAmmoPickup</RootNamespace>
     <Deterministic>true</Deterministic>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
     <OutputPath>..\..\..\build\bin\Win64_Shipping_Client\</OutputPath>
@@ -12,5 +12,7 @@
 
   <ItemGroup>
     <PackageReference Include="Bannerlord.ReferenceAssemblies" Version="1.*" PrivateAssets="all" />
+    <!-- MCM for configuration UI. IncludeAssets="compile" is important. -->
+    <PackageReference Include="Bannerlord.MCM" Version="5.*" IncludeAssets="compile" />
   </ItemGroup>
 </Project>

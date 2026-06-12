@@ -1,12 +1,14 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using TaleWorlds.Core;
 using TaleWorlds.Engine;
 using TaleWorlds.Library;
+using TaleWorlds.Localization;
 using TaleWorlds.MountAndBlade;
 
-namespace AutoAmmoPickup
+namespace Bannerlord.AutoAmmoPickup
 {
     /// <summary>
     /// Mission behavior that automatically picks up nearby usable ammo for the player
@@ -18,47 +20,18 @@ namespace AutoAmmoPickup
     /// </summary>
     public class AutoAmmoPickupMissionBehavior : MissionLogic
     {
-        #region Tunable Constants (easy to tweak for personal preference)
+        #region Internal Timing / Physics (not exposed in MCM for simplicity, but easy to promote later)
 
-        /// <summary>
-        /// How close (in meters, horizontal) the player must be to auto-pickup.
-        /// Smaller than manual "easy pickup" mods because we don't want it triggering from across the field.
-        /// Recommended: 2.6 - 3.5
-        /// </summary>
-        private const float AutoPickupDistance = 3.0f;
-
-        /// <summary>
-        /// Max vertical distance difference for pickup (helps on slopes/horse).
-        /// </summary>
         private const float MaxPickupHeight = 2.2f;
-
-        /// <summary>
-        /// Extra height tolerance when mounted (many players fight on horseback in battles).
-        /// </summary>
         private const float HorseHeightBonus = 1.2f;
-
-        /// <summary>
-        /// Minimum interval between scan attempts (seconds). Lower = more responsive, higher = less CPU.
-        /// </summary>
         private const float ScanInterval = 0.22f;
-
-        /// <summary>
-        /// Minimum time after a successful pickup before we consider another one (lets the bend animation finish).
-        /// </summary>
         private const float PickupCooldown = 0.65f;
-
-        /// <summary>
-        /// If true, shows a small message in the bottom-left when ammo is auto-picked.
-        /// Set to false for completely silent operation.
-        /// </summary>
-        private const bool ShowPickupMessages = true;
 
         #endregion
 
         // Internal state
         private float _timeSinceLastScan;
         private float _timeSinceLastPickup;
-        private bool _isEnabled = true; // Can be extended later with a hotkey toggle if desired
 
         public override MissionBehaviorType BehaviorType => MissionBehaviorType.Other;
 
@@ -66,7 +39,8 @@ namespace AutoAmmoPickup
         {
             base.OnMissionTick(dt);
 
-            if (!_isEnabled)
+            var settings = AutoAmmoPickupSettings.Instance;
+            if (settings == null || !settings.ModEnabled || settings.PickupMode == AutoPickupMode.Disabled)
                 return;
 
             _timeSinceLastScan += dt;
@@ -84,6 +58,12 @@ namespace AutoAmmoPickup
                 if (player == null || !player.IsActive() || player.IsUsingGameObject)
                     return;
 
+                // New configurable option: suspend autopick while crouching (default = true)
+                // In Bannerlord the default crouch key is "Z" and it is a toggle (not a hold).
+                // We query the actual agent crouch state using the real API at runtime.
+                if (settings.DisableWhileCrouching && IsAgentCrouching(player))
+                    return;
+
                 if (!ShouldRunInCurrentMission())
                     return;
 
@@ -91,13 +71,16 @@ namespace AutoAmmoPickup
                     return;
 
                 // Build the set of ammo we are currently interested in (refill existing or equip new stacks)
-                if (!TryGetDesiredAmmoClasses(player, out HashSet<WeaponClass> allowedRefillClasses, out HashSet<ItemObject.ItemTypeEnum> pickableAmmoTypes))
+                if (!TryGetDesiredAmmoClasses(player, settings.PickupMode, out HashSet<WeaponClass> allowedRefillClasses, out HashSet<ItemObject.ItemTypeEnum> pickableAmmoTypes))
                     return;
 
                 if (allowedRefillClasses.Count == 0 && pickableAmmoTypes.Count == 0)
                     return; // Player has no ranged weapons or all ammo stacks are full and no free slots
 
-                SpawnedItemEntity nearest = FindNearestUsableAmmo(player, allowedRefillClasses, pickableAmmoTypes);
+                // Use the configurable distance from MCM
+                float pickupDistance = Math.Max(1.0f, Math.Min(6.0f, settings.AutoPickupDistance));
+
+                SpawnedItemEntity nearest = FindNearestUsableAmmo(player, allowedRefillClasses, pickableAmmoTypes, pickupDistance);
                 if (nearest != null)
                 {
                     MissionWeapon weapon = nearest.WeaponCopy;
@@ -108,12 +91,15 @@ namespace AutoAmmoPickup
 
                     _timeSinceLastPickup = 0f;
 
-                    if (ShowPickupMessages && !weapon.IsEmpty && weapon.IsAnyConsumable())
+                    if (settings.ShowPickupMessages && !weapon.IsEmpty && weapon.IsAnyConsumable())
                     {
                         int amount = weapon.Amount;
                         string itemName = weapon.Item?.Name?.ToString() ?? "ammo";
+                        var pickupMsg = new TextObject("{=AAM_PICKUP}Picking up {AMOUNT} {ITEM}");
+                        pickupMsg.SetTextVariable("AMOUNT", amount);
+                        pickupMsg.SetTextVariable("ITEM", itemName);
                         InformationManager.DisplayMessage(
-                            new InformationMessage($"Picking up {amount} {itemName}", Colors.Yellow));
+                            new InformationMessage(pickupMsg.ToString(), Colors.Yellow));
                     }
                 }
             }
@@ -157,14 +143,15 @@ namespace AutoAmmoPickup
         }
 
         /// <summary>
-        /// Populates two sets:
-        /// - allowedRefillClasses: WeaponClasses of ammo types we can immediately add to existing equipped stacks (e.g. Arrow when you have a partially used quiver)
-        /// - pickableAmmoTypes: ItemTypes we can pick up into a free weapon slot (new Arrows quiver, new Thrown stack, etc.)
+        /// Populates two sets based on the current PickupMode from MCM:
+        /// - allowedRefillClasses: WeaponClasses of ammo types we can immediately add to existing equipped stacks
+        /// - pickableAmmoTypes: ItemTypes we can pick up into a free weapon slot
         ///
-        /// Mirrors the proven logic from Easy Weapon Pickup and similar QoL mods.
+        /// In "OnlyEquippedWeaponAmmo" mode we restrict collection to the weapon the player is currently wielding.
         /// </summary>
         private bool TryGetDesiredAmmoClasses(
             Agent player,
+            AutoPickupMode mode,
             out HashSet<WeaponClass> allowedRefillClasses,
             out HashSet<ItemObject.ItemTypeEnum> pickableAmmoTypes)
         {
@@ -191,7 +178,6 @@ namespace AutoAmmoPickup
                 if (item == null)
                     continue;
 
-                // When the player has a bow equipped, they can benefit from loose arrows (even if current quiver slot is empty)
                 if (item.Type == ItemObject.ItemTypeEnum.Bow)
                 {
                     pickableAmmoTypes.Add(ItemObject.ItemTypeEnum.Arrows);
@@ -203,7 +189,6 @@ namespace AutoAmmoPickup
 
                 if (mw.IsAnyConsumable())
                 {
-                    // We only want to auto-refill if this stack actually has room
                     if (mw.Amount < mw.MaxAmmo)
                     {
                         if (mw.CurrentUsageItem != null)
@@ -219,20 +204,44 @@ namespace AutoAmmoPickup
                 }
             }
 
-            // If we have a free slot, we can pick up new stacks of throwing weapons (javelins, throwing axes, knives...)
-            // and also new quivers for bows/crossbows (the type check above already added Arrows/Bolts when the launcher is present).
             if (hasEmptySlot)
             {
                 pickableAmmoTypes.Add(ItemObject.ItemTypeEnum.Thrown);
             }
-            else
+
+            // === Strict mode: only the weapon currently in the player's hand ===
+            if (mode == AutoPickupMode.OnlyEquippedWeaponAmmo)
             {
-                // No free slots at all -> we can only do refills into existing consumable stacks.
-                // pickableAmmoTypes may still contain Arrows/Bolts from the bow/crossbow presence,
-                // but the later finder will only accept them for new stacks if we have room (we cleared thrown).
-                // For strictness, if no empty slot we could clear non-refill types, but the consumable branch
-                // already protects us. Keep Arrows/Bolts so that "new quiver" logic can still work if the
-                // player somehow has a bow but the arrow slot was the empty one (edge case).
+                allowedRefillClasses.Clear();
+                pickableAmmoTypes.Clear();
+
+                MissionWeapon wielded = player.WieldedWeapon;
+                if (!wielded.IsEmpty && wielded.Item != null)
+                {
+                    var wieldedType = wielded.Item.Type;
+
+                    if (wieldedType == ItemObject.ItemTypeEnum.Bow)
+                    {
+                        pickableAmmoTypes.Add(ItemObject.ItemTypeEnum.Arrows);
+                    }
+                    else if (wieldedType == ItemObject.ItemTypeEnum.Crossbow)
+                    {
+                        pickableAmmoTypes.Add(ItemObject.ItemTypeEnum.Bolts);
+                    }
+                    else if (wieldedType == ItemObject.ItemTypeEnum.Thrown)
+                    {
+                        pickableAmmoTypes.Add(ItemObject.ItemTypeEnum.Thrown);
+                    }
+
+                    if (wielded.IsAnyConsumable() && wielded.CurrentUsageItem != null)
+                    {
+                        if (wielded.Amount < wielded.MaxAmmo)
+                        {
+                            allowedRefillClasses.Add(wielded.CurrentUsageItem.WeaponClass);
+                        }
+                    }
+                }
+                // If nothing is wielded (e.g. holding a sword), strict mode picks up nothing.
             }
 
             return true;
@@ -244,13 +253,14 @@ namespace AutoAmmoPickup
         private SpawnedItemEntity FindNearestUsableAmmo(
             Agent player,
             HashSet<WeaponClass> allowedRefillClasses,
-            HashSet<ItemObject.ItemTypeEnum> pickableAmmoTypes)
+            HashSet<ItemObject.ItemTypeEnum> pickableAmmoTypes,
+            float autoPickupDistance)
         {
             if (player == null)
                 return null;
 
             Vec3 playerPos = player.Position;
-            float maxDistSq = AutoPickupDistance * AutoPickupDistance;
+            float maxDistSq = autoPickupDistance * autoPickupDistance;
             float heightTolerance = MaxPickupHeight + (player.MountAgent != null ? HorseHeightBonus : 0f);
 
             List<WeakGameEntity> entities = Mission.GetActiveEntitiesWithScriptComponentOfType<SpawnedItemEntity>().ToList();
@@ -314,10 +324,55 @@ namespace AutoAmmoPickup
             return best;
         }
 
+        /// <summary>
+        /// Returns true if the given agent is currently in the crouched stance.
+        /// 
+        /// Bannerlord's default crouch ("Z" key) is a toggle, not a hold.
+        /// We use reflection + direct property access so it works both with limited
+        /// ReferenceAssemblies at compile time and the real game assemblies at runtime.
+        /// Preferred properties (in order): IsCrouching, then CrouchMode == Crouched.
+        /// </summary>
+        private static bool IsAgentCrouching(Agent agent)
+        {
+            if (agent == null || !agent.IsActive())
+                return false;
+
+            try
+            {
+                // 1. Direct IsCrouching property (exists in many versions of the game)
+                var isCrouchingProp = typeof(Agent).GetProperty("IsCrouching", BindingFlags.Public | BindingFlags.Instance);
+                if (isCrouchingProp != null)
+                {
+                    object val = isCrouchingProp.GetValue(agent);
+                    if (val is bool b) return b;
+                }
+
+                // 2. CrouchMode enum (very common in current Bannerlord)
+                var crouchModeProp = typeof(Agent).GetProperty("CrouchMode", BindingFlags.Public | BindingFlags.Instance);
+                if (crouchModeProp != null)
+                {
+                    object modeObj = crouchModeProp.GetValue(agent);
+                    if (modeObj != null)
+                    {
+                        string modeName = modeObj.ToString();
+                        // "Crouched" is the value we care about (enum name or underlying value)
+                        if (modeName == "Crouched" || modeName.EndsWith(".Crouched") || modeName == "1")
+                            return true;
+                    }
+                }
+            }
+            catch
+            {
+                // Swallow reflection errors; fall through to false
+            }
+
+            return false;
+        }
+
         // Future extension ideas:
-        // - Add a simple hotkey (e.g. in OnMissionTick check input) to temporarily disable auto pickup.
-        // - Respect a "only when out of ammo" policy instead of "whenever room".
-        // - Add MCM (Mod Configuration Menu) support for runtime toggles and distance tuning.
-        // - Also auto-pick for AI companions (more complex, risk of balance change).
+        // - Add a hotkey (e.g. Ctrl+something) to temporarily toggle auto pickup.
+        // - "Only when low on ammo" policy.
+        // - Auto-pick for companions (risk of balance / performance).
+        // - More granular per-weapon-type toggles in MCM.
     }
 }

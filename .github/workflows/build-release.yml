@@ -29,40 +29,23 @@ jobs:
         with:
           dotnet-version: 8.0.x
 
-      - name: Restore
-        run: dotnet restore dev/src/Bannerlord.AutoAmmoPickup/Bannerlord.AutoAmmoPickup.csproj
-
-      - name: Build
-        run: dotnet build dev/src/Bannerlord.AutoAmmoPickup/Bannerlord.AutoAmmoPickup.csproj -c Release --no-restore
-
-      - name: Prepare mod layout
+      - name: Build & Package (via unified script)
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
           $version = "${{ github.event.inputs.version }}"
-          $moduleName = "AutoAmmoPickup"
-          $staging = Join-Path $pwd "out/$moduleName"
-          $binDir = Join-Path $staging "bin/Win64_Shipping_Client"
-
-          New-Item -ItemType Directory -Path $binDir -Force | Out-Null
-
-          $templatePath = Join-Path $pwd "dev/module/SubModule.xml"
-          $subModuleXml = (Get-Content $templatePath -Raw).Replace("__VERSION__", $version)
-          Set-Content -Path (Join-Path $staging "SubModule.xml") -Value $subModuleXml
-
-          Copy-Item "build/bin/Win64_Shipping_Client/Bannerlord.AutoAmmoPickup.dll" $binDir -Force
-          Compress-Archive -Path "$staging/*" -DestinationPath "out/$moduleName-$version.zip" -Force
+          ./dev/build.ps1 -Version $version
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: auto-ammo-pickup-${{ github.event.inputs.version }}
-          path: out/AutoAmmoPickup-${{ github.event.inputs.version }}.zip
+          name: bannerlord-auto-ammo-pickup-${{ github.event.inputs.version }}
+          path: out/Bannerlord.AutoAmmoPickup-${{ github.event.inputs.version }}.zip
 
       - name: Create release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.event.inputs.version }}
-          name: Auto Ammo Pickup ${{ github.event.inputs.version }}
+          name: Bannerlord Auto Ammo Pickup ${{ github.event.inputs.version }}
           prerelease: ${{ github.event.inputs.prerelease }}
-          files: out/AutoAmmoPickup-${{ github.event.inputs.version }}.zip
+          files: out/Bannerlord.AutoAmmoPickup-${{ github.event.inputs.version }}.zip

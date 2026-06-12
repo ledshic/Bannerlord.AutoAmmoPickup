@@ -1,16 +1,29 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <Module>
-  <Id value="AutoAmmoPickup" />
-  <Name value="Auto Ammo Pickup" />
+  <Id value="Bannerlord.AutoAmmoPickup" />
+  <Name value="Bannerlord Auto Ammo Pickup" />
   <Version value="__VERSION__" />
   <DefaultModule value="false" />
   <ModuleCategory value="Singleplayer" />
   <ModuleType value="Community" />
+
+  <!-- MCM (Mod Configuration Menu) dependencies -->
+  <DependedModules>
+    <DependedModule Id="Native" />
+    <DependedModule Id="SandBoxCore" />
+    <DependedModule Id="Sandbox" />
+    <DependedModule Id="StoryMode" Optional="true" />
+    <DependedModule Id="Bannerlord.Harmony" />
+    <DependedModule Id="Bannerlord.ButterLib" />
+    <DependedModule Id="Bannerlord.UIExtenderEx" />
+    <DependedModule Id="Bannerlord.MBOptionScreen" />
+  </DependedModules>
+
   <SubModules>
     <SubModule>
       <Name value="Bannerlord.AutoAmmoPickup" />
       <DLLName value="Bannerlord.AutoAmmoPickup.dll" />
-      <SubModuleClassType value="AutoAmmoPickup.AutoAmmoPickupSubModule" />
+      <SubModuleClassType value="Bannerlord.AutoAmmoPickup.AutoAmmoPickupSubModule" />
       <Tags />
     </SubModule>
   </SubModules>

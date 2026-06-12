@@ -3,7 +3,7 @@ using TaleWorlds.Library;
 using TaleWorlds.Localization;
 using TaleWorlds.MountAndBlade;
 
-namespace AutoAmmoPickup
+namespace Bannerlord.AutoAmmoPickup
 {
     /// <summary>
     /// Entry point for the Auto Ammo Pickup module.
@@ -23,9 +23,9 @@ namespace AutoAmmoPickup
             base.OnBeforeInitialModuleScreenSetAsRoot();
 
             // Friendly startup message so players know the mod is active.
+            var loadedMsg = new TextObject("{=AAM_LOADED}Auto Ammo Pickup loaded. Ammo will be automatically collected in battles when in range.");
             InformationManager.DisplayMessage(
-                new InformationMessage("Auto Ammo Pickup loaded. Ammo will be automatically collected in battles when in range.",
-                    Colors.Cyan));
+                new InformationMessage(loadedMsg.ToString(), Colors.Cyan));
         }
 
         protected override void OnGameStart(Game game, IGameStarter gameStarterObject)
