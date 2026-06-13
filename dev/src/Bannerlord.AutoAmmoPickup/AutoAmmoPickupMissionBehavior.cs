@@ -70,18 +70,27 @@ namespace Bannerlord.AutoAmmoPickup
                 if (_timeSinceLastPickup < PickupCooldown)
                     return;
 
-                // Build the set of ammo we are currently interested in.
-                // Default mode now only refills existing ammo stacks.
-                if (!TryGetDesiredAmmoClasses(player, settings.PickupMode, out HashSet<WeaponClass> allowedRefillClasses, out HashSet<ItemObject.ItemTypeEnum> pickableAmmoTypes))
+                // Build refill filters from existing non-full ammo stacks only.
+                // This allows subtype merge (e.g. regular arrows <-> piercing arrows)
+                // while still forbidding new stack acquisition or loadout replacement.
+                if (!TryGetDesiredAmmoClasses(
+                    player,
+                    settings.PickupMode,
+                    out HashSet<WeaponClass> allowedRefillClasses,
+                    out HashSet<ItemObject.ItemTypeEnum> allowedRefillItemTypes))
                     return;
 
-                if (allowedRefillClasses.Count == 0 && pickableAmmoTypes.Count == 0)
-                    return; // Player has no ranged weapons or all ammo stacks are full and no free slots
+                if (allowedRefillClasses.Count == 0 && allowedRefillItemTypes.Count == 0)
+                    return; // No refillable ammo stacks: do not pick up anything
 
                 // Use the configurable distance from MCM
                 float pickupDistance = Math.Max(1.0f, Math.Min(6.0f, settings.AutoPickupDistance));
 
-                SpawnedItemEntity nearest = FindNearestUsableAmmo(player, allowedRefillClasses, pickableAmmoTypes, pickupDistance);
+                SpawnedItemEntity nearest = FindNearestUsableAmmo(
+                    player,
+                    allowedRefillClasses,
+                    allowedRefillItemTypes,
+                    pickupDistance);
                 if (nearest != null)
                 {
                     MissionWeapon weapon = nearest.WeaponCopy;
@@ -144,21 +153,18 @@ namespace Bannerlord.AutoAmmoPickup
         }
 
         /// <summary>
-        /// Populates two sets based on the current PickupMode from MCM:
-        /// - allowedRefillClasses: WeaponClasses of ammo types we can immediately add to existing equipped stacks
-        /// - pickableAmmoTypes: ItemTypes we can pick up into a free weapon slot
-        ///
-        /// Default mode refills existing stacks only (no new stack acquisition).
-        /// In "OnlyEquippedWeaponAmmo" mode we restrict collection to the weapon the player is currently wielding.
+        /// Populates refill filters from existing equipped ammo stacks that are not full.
+        /// We track both WeaponClass and ItemType so different ammo subtypes can still refill each other.
+        /// No mode is allowed to pick up new ammo/weapons into empty slots or by replacing current loadout.
         /// </summary>
         private bool TryGetDesiredAmmoClasses(
             Agent player,
             AutoPickupMode mode,
             out HashSet<WeaponClass> allowedRefillClasses,
-            out HashSet<ItemObject.ItemTypeEnum> pickableAmmoTypes)
+            out HashSet<ItemObject.ItemTypeEnum> allowedRefillItemTypes)
         {
             allowedRefillClasses = new HashSet<WeaponClass>();
-            pickableAmmoTypes = new HashSet<ItemObject.ItemTypeEnum>();
+            allowedRefillItemTypes = new HashSet<ItemObject.ItemTypeEnum>();
 
             MissionEquipment equipment = player.Equipment;
             if (equipment == null)
@@ -185,6 +191,11 @@ namespace Bannerlord.AutoAmmoPickup
                         {
                             allowedRefillClasses.Add(mw.CurrentUsageItem.WeaponClass);
                         }
+
+                        if (IsRefillAmmoItemType(item.Type))
+                        {
+                            allowedRefillItemTypes.Add(item.Type);
+                        }
                     }
 
                 }
@@ -194,32 +205,29 @@ namespace Bannerlord.AutoAmmoPickup
             if (mode == AutoPickupMode.OnlyEquippedWeaponAmmo)
             {
                 allowedRefillClasses.Clear();
-                pickableAmmoTypes.Clear();
+                allowedRefillItemTypes.Clear();
 
                 MissionWeapon wielded = player.WieldedWeapon;
-                if (!wielded.IsEmpty && wielded.Item != null)
+                if (TryGetWieldedAmmoItemType(wielded, out ItemObject.ItemTypeEnum wantedAmmoType))
                 {
-                    var wieldedType = wielded.Item.Type;
+                    for (EquipmentIndex i = EquipmentIndex.WeaponItemBeginSlot; i < EquipmentIndex.NumPrimaryWeaponSlots; i++)
+                    {
+                        MissionWeapon mw = equipment[i];
+                        if (mw.IsEmpty || !mw.IsAnyConsumable() || mw.Item == null)
+                            continue;
 
-                    if (wieldedType == ItemObject.ItemTypeEnum.Bow)
-                    {
-                        pickableAmmoTypes.Add(ItemObject.ItemTypeEnum.Arrows);
-                    }
-                    else if (wieldedType == ItemObject.ItemTypeEnum.Crossbow)
-                    {
-                        pickableAmmoTypes.Add(ItemObject.ItemTypeEnum.Bolts);
-                    }
-                    else if (wieldedType == ItemObject.ItemTypeEnum.Thrown)
-                    {
-                        pickableAmmoTypes.Add(ItemObject.ItemTypeEnum.Thrown);
-                    }
+                        if (mw.Amount >= mw.MaxAmmo)
+                            continue;
 
-                    if (wielded.IsAnyConsumable() && wielded.CurrentUsageItem != null)
-                    {
-                        if (wielded.Amount < wielded.MaxAmmo)
+                        if (mw.Item.Type != wantedAmmoType)
+                            continue;
+
+                        if (mw.CurrentUsageItem != null)
                         {
-                            allowedRefillClasses.Add(wielded.CurrentUsageItem.WeaponClass);
+                            allowedRefillClasses.Add(mw.CurrentUsageItem.WeaponClass);
                         }
+
+                        allowedRefillItemTypes.Add(mw.Item.Type);
                     }
                 }
                 // If nothing is wielded (e.g. holding a sword), strict mode picks up nothing.
@@ -234,7 +242,7 @@ namespace Bannerlord.AutoAmmoPickup
         private SpawnedItemEntity FindNearestUsableAmmo(
             Agent player,
             HashSet<WeaponClass> allowedRefillClasses,
-            HashSet<ItemObject.ItemTypeEnum> pickableAmmoTypes,
+            HashSet<ItemObject.ItemTypeEnum> allowedRefillItemTypes,
             float autoPickupDistance)
         {
             if (player == null)
@@ -283,16 +291,11 @@ namespace Bannerlord.AutoAmmoPickup
                     WeaponClass ammoClass = w.CurrentUsageItem != null ? w.CurrentUsageItem.WeaponClass : WeaponClass.Undefined;
                     ItemObject.ItemTypeEnum itemType = w.Item != null ? w.Item.Type : ItemObject.ItemTypeEnum.Invalid;
 
-                    bool canRefill = allowedRefillClasses.Contains(ammoClass);
-                    bool canEquipNew = pickableAmmoTypes.Contains(itemType);
-
-                    if (!canRefill && !canEquipNew)
+                    // Refill-only policy: never pick up items that would create a new stack or replace loadout.
+                    bool canRefillByClass = allowedRefillClasses.Contains(ammoClass);
+                    bool canRefillByType = allowedRefillItemTypes.Contains(itemType);
+                    if (!canRefillByClass && !canRefillByType)
                         continue;
-
-                    // For new stacks (Arrows/Bolts/Thrown when no current stack of that type), the reference
-                    // mod sometimes calls CanQuickPickUp. For auto we are lenient but still respect CanUseObject.
-                    // If you want stricter behavior, uncomment:
-                    // if (!canRefill && !player.CanQuickPickUp(dropped)) continue;
 
                     if (horizDistSq < bestDistSq)
                     {
@@ -303,6 +306,41 @@ namespace Bannerlord.AutoAmmoPickup
             }
 
             return best;
+        }
+
+        private static bool IsRefillAmmoItemType(ItemObject.ItemTypeEnum itemType)
+        {
+            return itemType == ItemObject.ItemTypeEnum.Arrows ||
+                   itemType == ItemObject.ItemTypeEnum.Bolts ||
+                   itemType == ItemObject.ItemTypeEnum.Thrown;
+        }
+
+        private static bool TryGetWieldedAmmoItemType(MissionWeapon wielded, out ItemObject.ItemTypeEnum ammoType)
+        {
+            ammoType = ItemObject.ItemTypeEnum.Invalid;
+
+            if (wielded.IsEmpty || wielded.Item == null)
+                return false;
+
+            if (wielded.Item.Type == ItemObject.ItemTypeEnum.Bow)
+            {
+                ammoType = ItemObject.ItemTypeEnum.Arrows;
+                return true;
+            }
+
+            if (wielded.Item.Type == ItemObject.ItemTypeEnum.Crossbow)
+            {
+                ammoType = ItemObject.ItemTypeEnum.Bolts;
+                return true;
+            }
+
+            if (wielded.Item.Type == ItemObject.ItemTypeEnum.Thrown)
+            {
+                ammoType = ItemObject.ItemTypeEnum.Thrown;
+                return true;
+            }
+
+            return false;
         }
 
         /// <summary>
