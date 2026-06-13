@@ -329,16 +329,34 @@ namespace Bannerlord.AutoAmmoPickup
                 }
 
                 // 2. CrouchMode enum (very common in current Bannerlord)
-                var crouchModeProp = typeof(Agent).GetProperty("CrouchMode", BindingFlags.Public | BindingFlags.Instance);
+                // Try both "CrouchMode" and "crouchMode" property names to handle different versions
+                PropertyInfo crouchModeProp = typeof(Agent).GetProperty("CrouchMode", BindingFlags.Public | BindingFlags.Instance)
+                                           ?? typeof(Agent).GetProperty("crouchMode", BindingFlags.Public | BindingFlags.IgnoreCase | BindingFlags.Instance);
                 if (crouchModeProp != null)
                 {
                     object modeObj = crouchModeProp.GetValue(agent);
                     if (modeObj != null)
                     {
-                        string modeName = modeObj.ToString();
-                        // "Crouched" is the value we care about (enum name or underlying value)
-                        if (modeName == "Crouched" || modeName.EndsWith(".Crouched") || modeName == "1")
+                        // Get the underlying integer value of the enum
+                        int enumValue = Convert.ToInt32(modeObj);
+
+                        // Check for common CrouchMode enum values:
+                        // NotCrouching = 0, Crouching = 1, Crouched = 2 (or similar variants)
+                        // We consider both "Crouching" (transitioning) and "Crouched" (fully crouched) as crouched
+                        if (enumValue >= 1)
                             return true;
+
+                        // Fallback: string-based comparison for unrecognized enum values
+                        string modeName = modeObj.ToString();
+                        if (!string.IsNullOrEmpty(modeName))
+                        {
+                            // Remove namespace qualification if present (e.g. "Agent+CrouchMode.Crouched" -> "Crouched")
+                            modeName = modeName.Contains('.') ? modeName.Substring(modeName.LastIndexOf('.') + 1) : modeName;
+
+                            if (modeName.Equals("Crouched", StringComparison.OrdinalIgnoreCase) ||
+                                modeName.Equals("Crouching", StringComparison.OrdinalIgnoreCase))
+                                return true;
+                        }
                     }
                 }
             }
