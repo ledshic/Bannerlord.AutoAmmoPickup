@@ -19,6 +19,13 @@
     <string id="AAM_PickupMode" text="Pickup Mode" />
     <string id="AAM_PickupModeHint" text="Controls what kind of ammo the mod will automatically pick up." />
 
+    <string id="AAM_ModeOptionDefault" text="Mode: Default - any usable ammo from equipped weapons" />
+    <string id="AAM_ModeDefaultHint" text="Picks up any usable ammo type inferred from your equipped weapons and free slots." />
+    <string id="AAM_ModeOptionEquipped" text="Mode: Only currently equipped ranged weapon ammo" />
+    <string id="AAM_ModeEquippedHint" text="Restricts pickup to ammo compatible with the currently wielded ranged weapon." />
+    <string id="AAM_ModeOptionDisabled" text="Mode: Disabled" />
+    <string id="AAM_ModeDisabledHint" text="Disables automatic ammo pickup." />
+
     <string id="AAM_ModeDefault" text="Default - Any usable ammo based on your equipped weapons" />
     <string id="AAM_ModeEquipped" text="Only ammo for the currently equipped ranged weapon (in-hand)" />
     <string id="AAM_ModeDisabled" text="Disabled" />

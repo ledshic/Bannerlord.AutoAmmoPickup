@@ -1,6 +1,7 @@
 using MCM.Abstractions.Attributes;
 using MCM.Abstractions.Attributes.v2;
 using MCM.Abstractions.Base.Global;
+using System;
 using System.ComponentModel;
 using TaleWorlds.Localization;
 
@@ -51,12 +52,59 @@ namespace Bannerlord.AutoAmmoPickup
         [SettingPropertyGroup("{=AAM_General}General", GroupOrder = 0)]
         public bool ModEnabled { get; set; } = true;
 
-        [SettingPropertyDropdown(
-            "{=AAM_PickupMode}Pickup Mode",
+        private bool _modeDefault = true;
+        private bool _modeOnlyEquippedWeaponAmmo;
+        private bool _modeDisabled;
+
+        [SettingPropertyBool(
+            "{=AAM_ModeOptionDefault}Mode: Default - any usable ammo from equipped weapons",
             RequireRestart = false,
-            HintText = "{=AAM_PickupModeHint}Controls what kind of ammo the mod will automatically pick up.")]
+            HintText = "{=AAM_ModeDefaultHint}Picks up any usable ammo type inferred from your equipped weapons and free slots.")]
         [SettingPropertyGroup("{=AAM_General}General")]
-        public AutoPickupMode PickupMode { get; set; } = AutoPickupMode.Default;
+        public bool ModeDefault
+        {
+            get => _modeDefault;
+            set => SetExclusiveMode(AutoPickupMode.Default, value);
+        }
+
+        [SettingPropertyBool(
+            "{=AAM_ModeOptionEquipped}Mode: Only currently equipped ranged weapon ammo",
+            RequireRestart = false,
+            HintText = "{=AAM_ModeEquippedHint}Restricts pickup to ammo compatible with the currently wielded ranged weapon.")]
+        [SettingPropertyGroup("{=AAM_General}General")]
+        public bool ModeOnlyEquippedWeaponAmmo
+        {
+            get => _modeOnlyEquippedWeaponAmmo;
+            set => SetExclusiveMode(AutoPickupMode.OnlyEquippedWeaponAmmo, value);
+        }
+
+        [SettingPropertyBool(
+            "{=AAM_ModeOptionDisabled}Mode: Disabled",
+            RequireRestart = false,
+            HintText = "{=AAM_ModeDisabledHint}Disables automatic ammo pickup.")]
+        [SettingPropertyGroup("{=AAM_General}General")]
+        public bool ModeDisabled
+        {
+            get => _modeDisabled;
+            set => SetExclusiveMode(AutoPickupMode.Disabled, value);
+        }
+
+        /// <summary>
+        /// Effective pickup mode consumed by mission behavior.
+        /// </summary>
+        public AutoPickupMode PickupMode
+        {
+            get
+            {
+                if (_modeDisabled)
+                    return AutoPickupMode.Disabled;
+
+                if (_modeOnlyEquippedWeaponAmmo)
+                    return AutoPickupMode.OnlyEquippedWeaponAmmo;
+
+                return AutoPickupMode.Default;
+            }
+        }
 
         [SettingPropertyBool(
             "{=AAM_DisableCrouch}Disable while crouching",
@@ -84,6 +132,37 @@ namespace Bannerlord.AutoAmmoPickup
             HintText = "{=AAM_DistanceHint}How close (horizontal) the player must be to auto-pick up ammo. Lower values feel more realistic.")]
         [SettingPropertyGroup("{=AAM_Tuning}Tuning", GroupOrder = 1)]
         public float AutoPickupDistance { get; set; } = 3.0f;
+
+        private void SetExclusiveMode(AutoPickupMode requestedMode, bool selected)
+        {
+            if (!selected)
+            {
+                // Keep at least one mode selected; this emulates a radio group with checkboxes.
+                OnPropertyChanged(nameof(ModeDefault));
+                OnPropertyChanged(nameof(ModeOnlyEquippedWeaponAmmo));
+                OnPropertyChanged(nameof(ModeDisabled));
+                return;
+            }
+
+            bool newDefault = requestedMode == AutoPickupMode.Default;
+            bool newOnlyEquipped = requestedMode == AutoPickupMode.OnlyEquippedWeaponAmmo;
+            bool newDisabled = requestedMode == AutoPickupMode.Disabled;
+
+            if (_modeDefault == newDefault &&
+                _modeOnlyEquippedWeaponAmmo == newOnlyEquipped &&
+                _modeDisabled == newDisabled)
+            {
+                return;
+            }
+
+            _modeDefault = newDefault;
+            _modeOnlyEquippedWeaponAmmo = newOnlyEquipped;
+            _modeDisabled = newDisabled;
+
+            OnPropertyChanged(nameof(ModeDefault));
+            OnPropertyChanged(nameof(ModeOnlyEquippedWeaponAmmo));
+            OnPropertyChanged(nameof(ModeDisabled));
+        }
 
         #endregion
     }

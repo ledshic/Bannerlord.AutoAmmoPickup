@@ -20,6 +20,13 @@
     <string id="AAM_PickupMode" text="拾取模式" />
     <string id="AAM_PickupModeHint" text="控制模组会自动拾取哪种弹药。" />
 
+    <string id="AAM_ModeOptionDefault" text="模式：默认（按已装备武器拾取可用弹药）" />
+    <string id="AAM_ModeDefaultHint" text="根据你已装备武器与空槽位推断可拾取弹药类型。" />
+    <string id="AAM_ModeOptionEquipped" text="模式：仅当前手持远程武器弹药" />
+    <string id="AAM_ModeEquippedHint" text="仅拾取与当前手持远程武器兼容的弹药。" />
+    <string id="AAM_ModeOptionDisabled" text="模式：禁用" />
+    <string id="AAM_ModeDisabledHint" text="禁用自动弹药拾取。" />
+
     <string id="AAM_ModeDefault" text="默认 - 根据已装备武器拾取任何可用弹药" />
     <string id="AAM_ModeEquipped" text="仅拾取当前装备的远程武器（手中）弹药" />
     <string id="AAM_ModeDisabled" text="已禁用" />

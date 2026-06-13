@@ -70,7 +70,8 @@ namespace Bannerlord.AutoAmmoPickup
                 if (_timeSinceLastPickup < PickupCooldown)
                     return;
 
-                // Build the set of ammo we are currently interested in (refill existing or equip new stacks)
+                // Build the set of ammo we are currently interested in.
+                // Default mode now only refills existing ammo stacks.
                 if (!TryGetDesiredAmmoClasses(player, settings.PickupMode, out HashSet<WeaponClass> allowedRefillClasses, out HashSet<ItemObject.ItemTypeEnum> pickableAmmoTypes))
                     return;
 
@@ -147,6 +148,7 @@ namespace Bannerlord.AutoAmmoPickup
         /// - allowedRefillClasses: WeaponClasses of ammo types we can immediately add to existing equipped stacks
         /// - pickableAmmoTypes: ItemTypes we can pick up into a free weapon slot
         ///
+        /// Default mode refills existing stacks only (no new stack acquisition).
         /// In "OnlyEquippedWeaponAmmo" mode we restrict collection to the weapon the player is currently wielding.
         /// </summary>
         private bool TryGetDesiredAmmoClasses(
@@ -162,30 +164,18 @@ namespace Bannerlord.AutoAmmoPickup
             if (equipment == null)
                 return false;
 
-            bool hasEmptySlot = false;
-
             for (EquipmentIndex i = EquipmentIndex.WeaponItemBeginSlot; i < EquipmentIndex.NumPrimaryWeaponSlots; i++)
             {
                 MissionWeapon mw = equipment[i];
 
                 if (mw.IsEmpty)
                 {
-                    hasEmptySlot = true;
                     continue;
                 }
 
                 ItemObject item = mw.Item;
                 if (item == null)
                     continue;
-
-                if (item.Type == ItemObject.ItemTypeEnum.Bow)
-                {
-                    pickableAmmoTypes.Add(ItemObject.ItemTypeEnum.Arrows);
-                }
-                else if (item.Type == ItemObject.ItemTypeEnum.Crossbow)
-                {
-                    pickableAmmoTypes.Add(ItemObject.ItemTypeEnum.Bolts);
-                }
 
                 if (mw.IsAnyConsumable())
                 {
@@ -197,16 +187,7 @@ namespace Bannerlord.AutoAmmoPickup
                         }
                     }
 
-                    if (mw.Amount == 0)
-                    {
-                        hasEmptySlot = true;
-                    }
                 }
-            }
-
-            if (hasEmptySlot)
-            {
-                pickableAmmoTypes.Add(ItemObject.ItemTypeEnum.Thrown);
             }
 
             // === Strict mode: only the weapon currently in the player's hand ===
@@ -326,7 +307,7 @@ namespace Bannerlord.AutoAmmoPickup
 
         /// <summary>
         /// Returns true if the given agent is currently in the crouched stance.
-        /// 
+        ///
         /// Bannerlord's default crouch ("Z" key) is a toggle, not a hold.
         /// We use reflection + direct property access so it works both with limited
         /// ReferenceAssemblies at compile time and the real game assemblies at runtime.
